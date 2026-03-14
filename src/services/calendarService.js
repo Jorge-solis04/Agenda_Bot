@@ -8,7 +8,8 @@ const auth = new google.auth.GoogleAuth({
 
 const calendar = google.calendar({ version: 'v3', auth });
 
-const CALENDAR_ID = 'jorgesolicon@gmail.com'; 
+// En lugar de hardcodear el correo:
+const CALENDAR_ID = process.env.CALENDAR_ID || 'primary';
 
 async function obtenerHuecosLibres(fechaStr) {
     const timeMin = `${fechaStr}T09:00:00-06:00`;
