@@ -55,7 +55,11 @@ app.post('/webhook', async (req, res) => {
     const mensaje = value?.messages?.[0];
 
     if (mensaje) {
-        const wa_id = mensaje.from;
+        let wa_id = mensaje.from;
+        if (wa_id.startsWith('521') && wa_id.length === 13) {
+            wa_id = '52' + wa_id.substring(3);
+            console.log(`🔧 Número limpiado a: ${wa_id}`);
+        }
         const numeroNegocio = value.metadata.display_phone_number;
         
         // Limpiamos el texto si es botón o escrito
@@ -63,9 +67,14 @@ app.post('/webhook', async (req, res) => {
         if (mensaje.type === 'text') texto = mensaje.text.body.toLowerCase();
         if (mensaje.type === 'interactive') texto = mensaje.interactive.button_reply.id;
 
-        // ¡Delegamos la responsabilidad!
-        await enrutarMensaje(numeroNegocio, wa_id, texto);
+        // Delegamos la responsabilidad sin bloquear la respuesta a Meta
+        // Esto evita que Meta reenvíe el mensaje si el proceso tarda más de 3 segundos
+        enrutarMensaje(numeroNegocio, wa_id, texto).catch(err => {
+            console.error(`❌ Error crítico en el ruteo para ${wa_id}:`, err);
+        });
     }
+
+    // Respondemos inmediatamente a Meta
     res.sendStatus(200);
 });
 

@@ -13,7 +13,11 @@ async function enrutarMensaje(numeroNegocio, numeroCliente, texto) {
 
     if (negocio) {
         console.log(`Routing message from ${numeroCliente} to business logic for ${numeroNegocio}`);
-        await negocio.procesarMensaje(numeroCliente, texto);
+        try {
+            await negocio.procesarMensaje(numeroCliente, texto);
+        } catch (error) {
+            console.error(`❌ Error ejecutando lógica para ${numeroNegocio}:`, error);
+        }
     } else {
         console.warn(`⚠️ Advertencia: Se recibió un mensaje para el número ${numeroNegocio}, pero no hay un cliente configurado para él.`);
     }

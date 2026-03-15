@@ -58,7 +58,11 @@ async function procesarMensaje(wa_id, texto) {
                     } 
                     // El mensaje por defecto AHORA lanza los botones
                     else {
-                        await enviarBotonesWhatsApp(wa_id, "¡Hola! Soy tu asistente virtual de reservas. ¿En qué te puedo ayudar hoy? 👇");
+                        await enviarBotonesWhatsApp(wa_id, "¡Hola! Soy tu asistente virtual de reservas. ¿En qué te puedo ayudar hoy? 👇", [
+                            { id: 'btn_agendar', title: '📅 Agendar' },
+                            { id: 'btn_reagendar', title: '🔄 Reagendar' },
+                            { id: 'btn_cancelar', title: '❌ Cancelar' }
+                        ]);
                     }
                     break;
 
@@ -105,17 +109,25 @@ async function procesarMensaje(wa_id, texto) {
                     break;
 
                 case 'esperando_hora':
-                    // Guardamos la hora tal cual la escribió el usuario (asumimos que elige una de la lista)
-                    // TODO: Aquí se podría añadir validación para ver si la hora está en la lista 'huecos'
-                    sesiones[wa_id].hora_elegida = texto.trim();
+                    const horaIngresada = texto.trim();
 
-                    if (!/^\d{2}:\d{2}$/.test(sesiones[wa_id].hora_elegida)) {
+                    // 1. Validar formato básico
+                    if (!/^\d{2}:\d{2}$/.test(horaIngresada)) {
                         await enviarMensajeWhatsApp(wa_id, "El formato de hora no es correcto. Por favor, escribe la hora en formato HH:MM (Ej. 14:00).");
                         break;
                     }
 
+                    // 2. Validar si la hora está realmente disponible en los huecos
+                    const huecosDisponibles = await obtenerHuecosLibres(sesiones[wa_id].fecha_elegida);
+                    
+                    if (!huecosDisponibles.includes(horaIngresada)) {
+                        await enviarMensajeWhatsApp(wa_id, `Lo siento, esa hora ya no está disponible o no es válida. 😕\n\nLos horarios disponibles para el ${sesiones[wa_id].fecha_elegida} son:\n${huecosDisponibles.join('\n')}\n\nPor favor, escribe una de esas opciones.`);
+                        break; // Se mantiene en este paso
+                    }
+
+                    sesiones[wa_id].hora_elegida = horaIngresada;
                     sesiones[wa_id].paso = 'esperando_nombre';
-                    await enviarMensajeWhatsApp(wa_id, `Perfecto, por ultimo ¿A qué nombre agendamos la cita?`);
+                    await enviarMensajeWhatsApp(wa_id, `Perfecto, por último ¿A qué nombre agendamos la cita?`);
                     break;
 
                 case 'esperando_nombre':

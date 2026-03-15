@@ -2,14 +2,14 @@ const { google } = require('googleapis');
 const path = require('path');
 
 const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(__dirname, 'credentials.json'),
+    keyFile: path.join(__dirname, '../../credentials.json'),
     scopes: ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events'],
 });
 
 const calendar = google.calendar({ version: 'v3', auth });
 
 // En lugar de hardcodear el correo:
-const CALENDAR_ID = process.env.CALENDAR_ID || 'primary';
+const CALENDAR_ID = (process.env.CALENDAR_ID || 'primary').replace(/["';]/g, '').trim();
 
 async function obtenerHuecosLibres(fechaStr) {
     const timeMin = `${fechaStr}T09:00:00-06:00`;
