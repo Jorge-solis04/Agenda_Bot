@@ -1,11 +1,11 @@
 const { enviarMensajeWhatsApp, enviarBotonesWhatsApp } = require('../services/whatsAppService');
-
 const { obtenerHuecosLibres, crearEvento, buscarCitaPorTelefono, eliminarEvento } = require('../services/calendarService');
+const chrono = require('chrono-node');
 
 
 const sesiones = {};
 
-export async function procesarMensaje(wa_id, texto) {
+async function procesarMensaje(wa_id, texto) {
     if (!sesiones[wa_id]) {
                 sesiones[wa_id] = { paso: 'inicio' };
             }

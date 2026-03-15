@@ -9,7 +9,7 @@ const headers = {
     'Content-Type': 'application/json'
 };
 
-export async function enviarMensajeWhatsApp(numero, texto) {
+async function enviarMensajeWhatsApp(numero, texto) {
     try {
         await axios.post(BASE_URL, {
             messaging_product: 'whatsapp',
@@ -22,7 +22,7 @@ export async function enviarMensajeWhatsApp(numero, texto) {
     }
 }
 
-export async function enviarBotonesWhatsApp(numero, texto, botones) {
+async function enviarBotonesWhatsApp(numero, texto, botones) {
     // botones debe ser un array: [{id: 'btn1', title: 'Texto'}, ...]
     try {
         await axios.post(BASE_URL, {
@@ -45,7 +45,7 @@ export async function enviarBotonesWhatsApp(numero, texto, botones) {
     }
 }
 
-export async function enviarTemplate(numero, templateName, variables) {
+async function enviarTemplate(numero, templateName, variables) {
     try {
         await axios.post(BASE_URL, {
             messaging_product: 'whatsapp',

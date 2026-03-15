@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const { obtenerCitasDeManana } = require('../services/calendarService');
-const { enviarTemplate } = require('../services/whatsappService');
+const { enviarTemplate } = require('../services/whatsAppService');
 
 function iniciarCronJobs() {
     // Configúralo a las 8:00 AM para producción
