@@ -4,7 +4,7 @@ const steakBoutique = require('./clients/steakBoutique');
 
 // Diccionario de ruteo: Mapea números de WhatsApp de Meta a archivos de lógica
 const directorioClientes = {
-    "524641697975": steakBoutique, // Tu número actual
+    "15551490506": steakBoutique, // Tu número actual
     // "524640000000": barberiaNorte
 };
 
