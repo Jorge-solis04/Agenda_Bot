@@ -168,11 +168,11 @@ const handlers = {
 
     await enviarMensajeWhatsApp(wa_id, `¡Listo ${sesion.nombre}! Tu cita quedó confirmada para el ${sesion.fecha_elegida} a las ${sesion.hora_elegida}.`);
 
-    // if (config.ownerPhone) {
-    //   const fechaFormateada = `${sesion.fecha_elegida} / ${sesion.hora_elegida} hrs`;
-    //   const variablesAlerta = [sesion.nombre, wa_id, fechaFormateada];
-    //   await enviarTemplate(config.ownerPhone, "alerta_cita_nueva", variablesAlerta);
-    // }
+    if (config.ownerPhone) {
+      const fechaFormateada = `${sesion.fecha_elegida} / ${sesion.hora_elegida} hrs`;
+      const variablesAlerta = [sesion.nombre, wa_id, fechaFormateada];
+      await enviarTemplate(config.ownerPhone, "alerta_nueva_cita", variablesAlerta);
+    }
     delete sesiones[wa_id];
   },
 
