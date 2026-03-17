@@ -8,16 +8,13 @@ const auth = new google.auth.GoogleAuth({
 
 const calendar = google.calendar({ version: 'v3', auth });
 
-// En lugar de hardcodear el correo:
-const CALENDAR_ID = (process.env.CALENDAR_ID || 'primary').replace(/["';]/g, '').trim();
-
-async function obtenerHuecosLibres(fechaStr) {
+async function obtenerHuecosLibres(calendarId, fechaStr) {
     const timeMin = `${fechaStr}T09:00:00-06:00`;
     const timeMax = `${fechaStr}T18:00:00-06:00`;
 
     try {
         const response = await calendar.events.list({
-            calendarId: CALENDAR_ID,
+            calendarId: calendarId,
             timeMin: timeMin,
             timeMax: timeMax,
             singleEvents: true,
@@ -50,7 +47,7 @@ function calcularSlotsDisponibles(eventosOcupados) {
     return libres;
 }
 
-async function crearEvento(fecha, hora, nombre, telefono) {
+async function crearEvento(calendarId, fecha, hora, nombre, telefono) {
     const startDateTime = `${fecha}T${hora}:00-06:00`;
     
     const [h, m] = hora.split(':');
@@ -68,28 +65,36 @@ async function crearEvento(fecha, hora, nombre, telefono) {
             dateTime: endDateTime,
             timeZone: 'America/Mexico_City',
         },
-        colorId: '1'
+        colorId: '1',
+        reminders: {
+            useDefault: false,
+            overrides: [
+                { method: 'popup', minutes: 15 },
+            ],
+        },
     };
 
     try {
         const response = await calendar.events.insert({
-            calendarId: CALENDAR_ID,
+            calendarId: calendarId,
             resource: evento,
         });
-        console.log('✅ Evento creado en Google Calendar:', response.data.htmlLink);
+        console.log(`✅ Evento creado en Google Calendar: ${response.data.htmlLink}
+                Datos: ${nombre} - ${telefono} - ${fecha} ${hora}
+            ` );
         return true;
     } catch (error) {
-        console.error('❌ Error insertando evento en Google Calendar:', error);
+        console.error(`❌ Error insertando evento en Google Calendar: ${error}`);
         return false;
     }
 }
 
-async function buscarCitaPorTelefono(telefono) {
+async function buscarCitaPorTelefono(calendarId, telefono) {
     const hoy = new Date().toISOString();
 
     try {
         const response = await calendar.events.list({
-            calendarId: CALENDAR_ID, 
+            calendarId: calendarId, 
             timeMin: hoy,
             q: telefono,
             singleEvents: true,
@@ -108,10 +113,10 @@ async function buscarCitaPorTelefono(telefono) {
     }
 }
 
-async function eliminarEvento(eventId) {
+async function eliminarEvento(calendarId, eventId) {
     try {
         await calendar.events.delete({
-            calendarId: CALENDAR_ID,
+            calendarId: calendarId,
             eventId: eventId,
         });
         console.log(`✅ Evento ${eventId} eliminado de Google Calendar.`);
@@ -122,7 +127,7 @@ async function eliminarEvento(eventId) {
     }
 }
 
-async function obtenerCitasDeManana() {
+async function obtenerCitasDeManana(calendarId) {
     const hoy = new Date();
     
     const manana = new Date(hoy);
@@ -137,14 +142,11 @@ async function obtenerCitasDeManana() {
     const timeMin = `${fechaStr}T00:00:00-06:00`;
     const timeMax = `${fechaStr}T23:59:59-06:00`;
 
-    console.log(`Obteniendo citas para mañana (${fechaStr})...`);
-    console.log(`min: ${timeMin}, max: ${timeMax}`);
-
-    console.log(`Buscando citas para mañana exactamente entre: ${timeMin} y ${timeMax}`);
+    // console.log(`Obteniendo citas para mañana (${fechaStr}) para el calendario ${calendarId}...`);
 
     try {
         const response = await calendar.events.list({
-            calendarId: CALENDAR_ID,
+            calendarId: calendarId,
             timeMin: timeMin,
             timeMax: timeMax,
             singleEvents: true,
@@ -152,7 +154,7 @@ async function obtenerCitasDeManana() {
         });
         return response.data.items || [];
     } catch (error) {
-        console.error('❌ Error buscando citas de mañana:', error);
+        console.error(`❌ Error buscando citas de mañana para ${calendarId}:`, error);
         return [];
     }
 }

@@ -9,6 +9,7 @@ const headers = {
     'Content-Type': 'application/json'
 };
 
+//Esta es la funcion que ayuda a mandar mensajes al usuario, se le manda el numero y el texto del mensaje
 async function enviarMensajeWhatsApp(numero, texto) {
     try {
         await axios.post(BASE_URL, {
@@ -22,6 +23,7 @@ async function enviarMensajeWhatsApp(numero, texto) {
     }
 }
 
+//Esta es la funcion que ayuda a mandar botones al usuario, se le manda el numero, el texto del mensaje y un array de botones
 async function enviarBotonesWhatsApp(numero, texto, botones) {
     // botones debe ser un array: [{id: 'btn1', title: 'Texto'}, ...]
     try {
@@ -45,6 +47,7 @@ async function enviarBotonesWhatsApp(numero, texto, botones) {
     }
 }
 
+//Esta es la funcion que ayuda a mandar plantillas al usuario, se le manda el numero, el nombre de la plantilla y un array de variables para llenar la plantilla
 async function enviarTemplate(numero, templateName, variables) {
     try {
         await axios.post(BASE_URL, {

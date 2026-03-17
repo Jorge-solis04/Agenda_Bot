@@ -1,26 +1,37 @@
 const steakBoutique = require('./clients/steakBoutique');
-// Aquí importarías otros clientes en el futuro:
 // const barberiaNorte = require('./clients/barberiaNorte');
 
-// Diccionario de ruteo: Mapea números de WhatsApp de Meta a archivos de lógica
-const directorioClientes = {
-    "15551490506": steakBoutique, // Tu número actual
-    // "524640000000": barberiaNorte
+const clientes = {
+    "15551490506": {
+        logic: steakBoutique,
+        config: {
+            name: "Steak Boutique",
+            calendarId: (process.env.CALENDAR_ID || 'primary').replace(/["';]/g, '').trim(),
+            ownerPhone: "524641697975"
+        }
+    },
+    // "524640000000": {
+    //     logic: barberiaNorte,
+    //     config: {
+    //         name: "Barbería Norte",
+    //         calendarId: 'xxxxxxxxxxxx@group.calendar.google.com'
+    //     }
+    // }
 };
 
 async function enrutarMensaje(numeroNegocio, numeroCliente, texto) {
-    const negocio = directorioClientes[numeroNegocio];
+    const cliente = clientes[numeroNegocio];
 
-    if (negocio) {
-        console.log(`Routing message from ${numeroCliente} to business logic for ${numeroNegocio}`);
+    if (cliente) {
+        // console.log(`Routing message from ${numeroCliente} to ${cliente.config.name}`);
         try {
-            await negocio.procesarMensaje(numeroCliente, texto);
+            await cliente.logic.procesarMensaje(numeroCliente, texto, cliente.config);
         } catch (error) {
-            console.error(`❌ Error ejecutando lógica para ${numeroNegocio}:`, error);
+            console.error(`❌ Error ejecutando lógica para ${cliente.config.name}:`, error);
         }
     } else {
         console.warn(`⚠️ Advertencia: Se recibió un mensaje para el número ${numeroNegocio}, pero no hay un cliente configurado para él.`);
     }
 }
 
-module.exports = { enrutarMensaje };
+module.exports = { enrutarMensaje, clientes };

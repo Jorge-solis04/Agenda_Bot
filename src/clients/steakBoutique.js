@@ -1,177 +1,230 @@
-const { enviarMensajeWhatsApp, enviarBotonesWhatsApp } = require('../services/whatsAppService');
-const { obtenerHuecosLibres, crearEvento, buscarCitaPorTelefono, eliminarEvento } = require('../services/calendarService');
-const chrono = require('chrono-node');
-
+const {
+  enviarMensajeWhatsApp,
+  enviarBotonesWhatsApp,
+  enviarTemplate,
+} = require("../services/whatsAppService");
+const {
+  obtenerHuecosLibres,
+  crearEvento,
+  buscarCitaPorTelefono,
+  eliminarEvento,
+} = require("../services/calendarService");
+const chrono = require("chrono-node");
 
 const sesiones = {};
 
-async function procesarMensaje(wa_id, texto) {
-    if (!sesiones[wa_id]) {
-                sesiones[wa_id] = { paso: 'inicio' };
-            }
+// --- MANEJADORES DE ESTADO (HANDLERS) ---
+const handlers = {
+  inicio: async (wa_id, texto, config, sesion) => {
+    const esAgendar = texto.includes("agendar") || texto.includes("cita") || texto === "btn_agendar";
+    const esReagendar = texto.includes("reagendar") || texto.includes("cambiar") || texto === "btn_reagendar";
+    const esCancelar = texto.includes("cancelar") || texto === "btn_cancelar";
 
-            // 2. Leemos en qué paso va este usuario para saber qué lógica aplicar
-            const estadoActual = sesiones[wa_id].paso;
+    if (esReagendar) {
+      await enviarMensajeWhatsApp(wa_id, "Buscando tu cita actual para modificarla...");
+      const cita = await buscarCitaPorTelefono(config.calendarId, wa_id);
 
-            // 3. FLUJO DE CONVERSACIÓN (Máquina de Estados)
-            // Evaluamos qué responder según el estado actual del usuario
-            switch (estadoActual) {
-                
-                case 'inicio':
-                    // Agregamos la validación del botón btn_agendar
-                    if (texto.includes('agendar') || texto.includes('cita') || texto === 'btn_agendar') {
-                        sesiones[wa_id].paso = 'esperando_fecha';
-                        await enviarMensajeWhatsApp(wa_id, "¡Excelente! 📅 ¿Para qué fecha te gustaría tu cita? (Ej. mañana, el próximo martes, 15 de abril)");
-                    } 
-                    // Agregamos la validación del botón btn_reagendar
-                    else if (texto.includes('reagendar') || texto.includes('cambiar') || texto === 'btn_reagendar') {
-                        await enviarMensajeWhatsApp(wa_id, "Buscando tu cita actual para modificarla...");
-                        
-                        const cita = await buscarCitaPorTelefono(wa_id);
-                        
-                        if (cita) {
-                            await eliminarEvento(cita.id);
-                            sesiones[wa_id].paso = 'esperando_fecha';
-                            await enviarMensajeWhatsApp(wa_id, "✅ Listo, he liberado tu horario anterior. ¿Para qué **nueva fecha** te gustaría agendar?");
-                        } else {
-                            await enviarMensajeWhatsApp(wa_id, "No encontré ninguna cita futura para modificar. Si quieres una nueva, toca el botón de Agendar.");
-                            delete sesiones[wa_id];
-                        }
-                    }
-                    // Agregamos la validación del botón btn_cancelar
-                    else if (texto.includes('cancelar') || texto === 'btn_cancelar') {
-                        await enviarMensajeWhatsApp(wa_id, "Buscando tu cita en el sistema, un momento...");
-                        
-                        const cita = await buscarCitaPorTelefono(wa_id);
-                        
-                        if (cita) {
-                            sesiones[wa_id].paso = 'confirmar_cancelacion';
-                            sesiones[wa_id].evento_a_cancelar = cita.id;
-                            const fechaCita = new Date(cita.start.dateTime).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
-                            
-                            // Aquí usamos botones de nuevo para que confirme Sí o No (¡Te lo dejo como reto extra después!)
-                            await enviarMensajeWhatsApp(wa_id, `Encontré una cita para el:\n📅 *${fechaCita}*\n\n¿Estás seguro de que deseas cancelarla? (Responde SÍ o NO)`);
-                        } else {
-                            await enviarMensajeWhatsApp(wa_id, "No encontré ninguna cita registrada a tu nombre.");
-                            delete sesiones[wa_id]; 
-                        }
-                    } 
-                    // El mensaje por defecto AHORA lanza los botones
-                    else {
-                        await enviarBotonesWhatsApp(wa_id, "¡Hola! Soy tu asistente virtual de reservas. ¿En qué te puedo ayudar hoy? 👇", [
-                            { id: 'btn_agendar', title: '📅 Agendar' },
-                            { id: 'btn_reagendar', title: '🔄 Reagendar' },
-                            { id: 'btn_cancelar', title: '❌ Cancelar' }
-                        ]);
-                    }
-                    break;
+      if (!cita) {
+        await enviarMensajeWhatsApp(wa_id, "No encontré ninguna cita futura para modificar. Si quieres una nueva, toca el botón de Agendar.");
+        delete sesiones[wa_id];
+        return;
+      }
 
-                case 'esperando_fecha':
-                    // Usamos chrono-node para intentar interpretar la fecha escrita en lenguaje natural
-                    // Quitamos forwardDate: true para que si escriben una fecha pasada (ej. "6 de marzo" hoy 8), no salte al 2025.
-                    const fechaParseada = chrono.es.parseDate(texto, new Date());
-                    console.log(`🕵️‍♂️ Fecha parseada por chrono: ${fechaParseada}`);
-                    if (!fechaParseada) {
-                        // Si no se pudo entender la fecha, pedimos que la repita sin cambiar de estado
-                        await enviarMensajeWhatsApp(wa_id, "Mmm, no logré entender esa fecha. Por favor intenta con algo como 'mañana' o 'el próximo viernes'.");
-                        break; 
-                    }
+      const fechaVieja = new Date(cita.start.dateTime).toLocaleString("es-MX", {
+        timeZone: "America/Mexico_City",
+        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+      });
 
-                    // Ajuste de zona horaria: chrono devuelve fecha en UTC, ajustamos para obtener la fecha local correcta
-                    const tzOffset = (new Date()).getTimezoneOffset() * 60000;
-                    const fechaLocal = new Date(fechaParseada.getTime() - tzOffset);
-                    const fechaString = fechaLocal.toISOString().split('T')[0];
-                    console.log(`🕵️‍♂️ Fecha ajustada a zona horaria local: ${fechaString}`);
-                    // VALIDACIÓN: Evitar fechas pasadas
-                    // Obtenemos la fecha de hoy ajustada a la zona horaria local para comparar
-                    const hoy = new Date(Date.now() - tzOffset).toISOString().split('T')[0];
-                    console.log(`🕵️‍♂️ Fecha de hoy ajustada a zona horaria local: ${hoy}`);
-                    if (fechaString < hoy) {
-                        await enviarMensajeWhatsApp(wa_id, "Esa fecha ya pasó 😅. Por favor, dime una fecha futura para tu cita.");
-                        break;
-                    }
+      sesion.reagendando = true;
+      sesion.info_cita_anterior = fechaVieja;
+      sesion.nombre = cita.summary.replace("Cita - ", "");
 
-                    // Guardamos la fecha en formato YYYY-MM-DD en la sesión del usuario
-                    sesiones[wa_id].fecha_elegida = fechaString;
-                    
-                    // Consultamos a Google Calendar si hay huecos
-                    const huecos = await obtenerHuecosLibres(sesiones[wa_id].fecha_elegida);
-                    
-                    if (huecos.length > 0) {
-                        // Si hay huecos, avanzamos al siguiente paso
-                        sesiones[wa_id].paso = 'esperando_hora';
-                        // Mostramos los horarios disponibles
-                        await enviarMensajeWhatsApp(wa_id, `Excelente, tengo estos horarios disponibles para el ${sesiones[wa_id].fecha_elegida}: \n${huecos.join('\n')}\n\nEscribe la hora que prefieras (Ej. 10:00).`);
-                    } else {
-                        // Si no hay huecos, nos quedamos en este state y pedimos otra fecha
-                        await enviarMensajeWhatsApp(wa_id, "Lo siento, no tengo horarios disponibles para ese día. Por favor, dime otra fecha.");
-                    }
-                    break;
+      await eliminarEvento(config.calendarId, cita.id);
+      sesion.paso = "esperando_fecha";
+      return await enviarMensajeWhatsApp(wa_id, `✅ Listo, he liberado tu cita del *${fechaVieja}*. ¿Para qué **nueva fecha** te gustaría agendar?`);
+    }
 
-                case 'esperando_hora':
-                    const horaIngresada = texto.trim();
+    if (esCancelar) {
+      await enviarMensajeWhatsApp(wa_id, "Buscando tu cita en el sistema, un momento...");
+      const cita = await buscarCitaPorTelefono(config.calendarId, wa_id);
 
-                    // 1. Validar formato básico
-                    if (!/^\d{2}:\d{2}$/.test(horaIngresada)) {
-                        await enviarMensajeWhatsApp(wa_id, "El formato de hora no es correcto. Por favor, escribe la hora en formato HH:MM (Ej. 14:00).");
-                        break;
-                    }
+      if (!cita) {
+        await enviarMensajeWhatsApp(wa_id, "No encontré ninguna cita registrada a tu nombre.");
+        delete sesiones[wa_id];
+        return;
+      }
 
-                    // 2. Validar si la hora está realmente disponible en los huecos
-                    const huecosDisponibles = await obtenerHuecosLibres(sesiones[wa_id].fecha_elegida);
-                    
-                    if (!huecosDisponibles.includes(horaIngresada)) {
-                        await enviarMensajeWhatsApp(wa_id, `Lo siento, esa hora ya no está disponible o no es válida. 😕\n\nLos horarios disponibles para el ${sesiones[wa_id].fecha_elegida} son:\n${huecosDisponibles.join('\n')}\n\nPor favor, escribe una de esas opciones.`);
-                        break; // Se mantiene en este paso
-                    }
+      const fechaCita = new Date(cita.start.dateTime).toLocaleString("es-MX", {
+        timeZone: "America/Mexico_City", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit"
+      });
 
-                    sesiones[wa_id].hora_elegida = horaIngresada;
-                    sesiones[wa_id].paso = 'esperando_nombre';
-                    await enviarMensajeWhatsApp(wa_id, `Perfecto, por último ¿A qué nombre agendamos la cita?`);
-                    break;
+      sesion.paso = "confirmar_cancelacion";
+      sesion.evento_a_cancelar = cita.id;
+      sesion.nombre = cita.summary.replace("Cita - ", "");
+      sesion.fecha_elegida = fechaCita;
 
-                case 'esperando_nombre':
-                    // Guardamos el nombre
-                    sesiones[wa_id].nombre = texto.trim();
-                    
-                    // Feedback en consola del servidor
-                    console.log(`Guardando la cita de ${sesiones[wa_id].nombre} en el calendario...`);
-                    
-                    // ACCIÓN FINAL: Crear el evento en Google Calendar
-                    const exito = await crearEvento(
-                        sesiones[wa_id].fecha_elegida, 
-                        sesiones[wa_id].hora_elegida, 
-                        sesiones[wa_id].nombre, 
-                        wa_id // Pasamos el teléfono para guardarlo en la descripción del evento
-                    );
+      return await enviarMensajeWhatsApp(wa_id, `Encontré una cita para el:\n📅 *${fechaCita}*\n\n¿Estás seguro de que deseas cancelarla? (Responde SÍ o NO)`);
+    }
 
-                    if (exito) {
-                        await enviarMensajeWhatsApp(wa_id, `¡Listo ${sesiones[wa_id].nombre}! Tu cita quedó confirmada en nuestra agenda para el ${sesiones[wa_id].fecha_elegida} a las ${sesiones[wa_id].hora_elegida}. ¡Te esperamos!`);
-                    } else {
-                        await enviarMensajeWhatsApp(wa_id, `Hubo un pequeño problema al guardar tu cita en el calendario. Por favor, intenta de nuevo escribiendo "agendar".`);
-                    }
-                    
-                    // LIMPIEZA: Borramos la sesión para que la próxima vez que escriba empiece de cero
-                    delete sesiones[wa_id];
-                    break;
+    if (esAgendar) {
+      sesion.paso = "esperando_fecha";
+      return await enviarMensajeWhatsApp(wa_id, "¡Excelente! 📅 ¿Para qué fecha te gustaría tu cita? (Ej. mañana, el próximo martes, 15 de abril)");
+    }
 
-                case 'confirmar_cancelacion':
-                    if (texto === 'si' || texto === 'sí') {
-                        const exito = await eliminarEvento(sesiones[wa_id].evento_a_cancelar);
-                        
-                        if (exito) {
-                            await enviarMensajeWhatsApp(wa_id, "✅ Tu cita ha sido cancelada exitosamente. ¡Esperamos verte pronto!");
-                        } else {
-                            await enviarMensajeWhatsApp(wa_id, "Hubo un error al intentar cancelar tu cita. Por favor, intenta más tarde.");
-                        }
-                    } else {
-                        await enviarMensajeWhatsApp(wa_id, "Perfecto, mantendremos tu cita intacta en la agenda. ¡Nos vemos pronto!");
-                    }
-                    
-                    // Sea cual sea la respuesta, terminamos el flujo
-                    delete sesiones[wa_id];
-                    break;
-            }
+    // Por defecto mostrar botones
+    return await enviarBotonesWhatsApp(wa_id, `¡Hola! Soy tu asistente virtual de reservas en ${config.name}. ¿En qué te puedo ayudar hoy? 👇`, [
+      { id: "btn_agendar", title: "📅 Agendar" },
+      { id: "btn_reagendar", title: "🔄 Reagendar" },
+      { id: "btn_cancelar", title: "❌ Cancelar" },
+    ]);
+  },
+
+  esperando_fecha: async (wa_id, texto, config, sesion) => {
+    const fechaParseada = chrono.es.parseDate(texto, new Date(), { forwardDate: true });
+    if (!fechaParseada) {
+      return await enviarMensajeWhatsApp(wa_id, "Mmm, no logré entender esa fecha. Por favor intenta con algo como 'mañana' o 'el próximo viernes'.");
+    }
+
+    const opciones = { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" };
+    const formateador = new Intl.DateTimeFormat("en-CA", opciones);
+    const fechaString = formateador.format(fechaParseada);
+    const hoy = formateador.format(new Date());
+
+    if (fechaString < hoy) {
+      return await enviarMensajeWhatsApp(wa_id, "Esa fecha ya pasó 😅. Por favor, dime una fecha futura para tu cita.");
+    }
+
+    const limiteFuturo = new Date();
+    limiteFuturo.setMonth(limiteFuturo.getMonth() + 2);
+    if (fechaParseada > limiteFuturo) {
+      return await enviarMensajeWhatsApp(wa_id, "Solo puedo agendar citas con hasta 2 meses de anticipación. Por favor, elige una fecha más cercana.");
+    }
+
+    sesion.fecha_elegida = fechaString;
+    const huecos = await obtenerHuecosLibres(config.calendarId, sesion.fecha_elegida);
+
+    if (huecos.length === 0) {
+      return await enviarMensajeWhatsApp(wa_id, "Lo siento, no tengo horarios disponibles para ese día. Por favor, dime otra fecha.");
+    }
+
+    sesion.paso = "esperando_hora";
+    await enviarMensajeWhatsApp(wa_id, `Excelente, tengo estos horarios disponibles para el ${sesion.fecha_elegida}: \n${huecos.join("\n")}\n\nEscribe la hora que prefieras (Ej. 10:00).`);
+    return await enviarBotonesWhatsApp(wa_id, "Si quieres elegir otra fecha, puedes hacerlo aquí:", [{ id: "btn_volver_fecha", title: "📅 Elegir otra fecha" }]);
+  },
+
+  esperando_hora: async (wa_id, texto, config, sesion) => {
+    if (texto === "btn_volver_fecha") {
+      sesion.paso = "esperando_fecha";
+      return await enviarMensajeWhatsApp(wa_id, "Sin problema. 📅 ¿Para qué otra fecha te gustaría revisar disponibilidad?");
+    }
+
+    const horaIngresada = texto.trim();
+    if (!/^\d{2}:\d{2}$/.test(horaIngresada)) {
+      return await enviarMensajeWhatsApp(wa_id, "El formato de hora no es correcto. Por favor, escribe la hora en formato HH:MM (Ej. 14:00).");
+    }
+
+    const huecosDisponibles = await obtenerHuecosLibres(config.calendarId, sesion.fecha_elegida);
+    if (!huecosDisponibles.includes(horaIngresada)) {
+      return await enviarMensajeWhatsApp(wa_id, `Lo siento, esa hora ya no está disponible o no es válida. 😕\n\nLos horarios disponibles para el ${sesion.fecha_elegida} son:\n${huecosDisponibles.join("\n")}\n\nPor favor, escribe una de esas opciones.`);
+    }
+
+    sesion.hora_elegida = horaIngresada;
+
+    // FLUJO REAGENDACIÓN (Salto de nombre)
+    if (sesion.reagendando) {
+      console.log(`🔄 Reagendando automáticamente para ${sesion.nombre}...`);
+      const exito = await crearEvento(config.calendarId, sesion.fecha_elegida, sesion.hora_elegida, sesion.nombre, wa_id);
+
+      if (!exito) {
+        return await enviarMensajeWhatsApp(wa_id, "Hubo un problema al reagendar tu cita. Por favor intenta de nuevo.");
+      }
+
+      await enviarMensajeWhatsApp(wa_id, `¡Listo! Tu cita ha sido movida al ${sesion.fecha_elegida} a las ${sesion.hora_elegida}. ¡Nos vemos pronto!`);
+
+      if (config.ownerPhone) {
+        const fechaNueva = `${sesion.fecha_elegida} / ${sesion.hora_elegida} hrs`;
+        const variablesAlerta = [sesion.nombre, fechaNueva, sesion.info_cita_anterior];
+        await enviarTemplate(config.ownerPhone, "alerta_reagendar_cita", variablesAlerta);
+      }
+      delete sesiones[wa_id];
+      return;
+    }
+
+    sesion.paso = "esperando_nombre";
+    return await enviarMensajeWhatsApp(wa_id, `Perfecto, por último ¿A qué nombre agendamos la cita?`);
+  },
+
+  esperando_nombre: async (wa_id, texto, config, sesion) => {
+    sesion.nombre = texto.trim();
+    console.log(`Guardando la cita de ${sesion.nombre} en el calendario de ${config.name}...`);
+
+    const exito = await crearEvento(config.calendarId, sesion.fecha_elegida, sesion.hora_elegida, sesion.nombre, wa_id);
+
+    if (!exito) {
+      await enviarMensajeWhatsApp(wa_id, `Hubo un pequeño problema al guardar tu cita. Por favor, intenta de nuevo escribiendo "agendar".`);
+      delete sesiones[wa_id];
+      return;
+    }
+
+    await enviarMensajeWhatsApp(wa_id, `¡Listo ${sesion.nombre}! Tu cita quedó confirmada para el ${sesion.fecha_elegida} a las ${sesion.hora_elegida}.`);
+
+    // if (config.ownerPhone) {
+    //   const fechaFormateada = `${sesion.fecha_elegida} / ${sesion.hora_elegida} hrs`;
+    //   const variablesAlerta = [sesion.nombre, wa_id, fechaFormateada];
+    //   await enviarTemplate(config.ownerPhone, "alerta_cita_nueva", variablesAlerta);
+    // }
+    delete sesiones[wa_id];
+  },
+
+  confirmar_cancelacion: async (wa_id, texto, config, sesion) => {
+    if (texto === "si" || texto === "sí") {
+      const exito = await eliminarEvento(config.calendarId, sesion.evento_a_cancelar);
+
+      if (exito) {
+        await enviarMensajeWhatsApp(wa_id, "✅ Tu cita ha sido cancelada exitosamente.");
+        if (config.ownerPhone) {
+          const variablesAlerta = [sesion.nombre, sesion.fecha_elegida];
+          await enviarTemplate(config.ownerPhone, "alerta_cancelacion_cita", variablesAlerta);
+        }
+      } else {
+        await enviarMensajeWhatsApp(wa_id, "Hubo un error al cancelar. Intenta más tarde.");
+      }
+    } else {
+      await enviarMensajeWhatsApp(wa_id, "Perfecto, mantendremos tu cita intacta.");
+    }
+    delete sesiones[wa_id];
+  },
+};
+
+// --- FUNCIÓN PRINCIPAL ---
+async function procesarMensaje(wa_id, texto, config) {
+  const TIEMPO_EXPIRACION = 15 * 60 * 1000;
+  const ahora = Date.now();
+
+  // Limpieza de sesión expirada
+  if (sesiones[wa_id] && (ahora - sesiones[wa_id].ultimaActividad > TIEMPO_EXPIRACION)) {
+    delete sesiones[wa_id];
+  }
+
+  // Inicialización o actualización de actividad
+  if (!sesiones[wa_id]) {
+    sesiones[wa_id] = { paso: "inicio", ultimaActividad: ahora };
+  } else {
+    sesiones[wa_id].ultimaActividad = ahora;
+  }
+
+  const estadoActual = sesiones[wa_id].paso;
+  const textoNormalizado = texto.toLowerCase().trim();
+  console.log(`📊 [${wa_id}] Estado: ${estadoActual} | Mensaje: "${textoNormalizado}"`);
+
+  // Ejecución del handler correspondiente
+  const handler = handlers[estadoActual];
+  if (handler) {
+    await handler(wa_id, textoNormalizado, config, sesiones[wa_id]);
+  } else {
+    console.error(`❌ No existe un manejador para el estado: ${estadoActual}`);
+    delete sesiones[wa_id];
+  }
 }
 
 module.exports = { procesarMensaje };

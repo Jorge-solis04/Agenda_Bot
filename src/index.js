@@ -49,6 +49,8 @@ app.get('/webhook', (req, res) => {
 // --------------------------------------------------------- //
 // Aquí llegan todos los mensajes que los usuarios envían al número de WhatsApp
 app.post('/webhook', async (req, res) => {
+    res.status(200)
+
     const entry = req.body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
@@ -62,26 +64,21 @@ app.post('/webhook', async (req, res) => {
         }
         const numeroNegocio = value.metadata.display_phone_number;
         
-        // Limpiamos el texto si es botón o escrito
         let texto = "";
         if (mensaje.type === 'text') texto = mensaje.text.body.toLowerCase();
         if (mensaje.type === 'interactive') texto = mensaje.interactive.button_reply.id;
 
-        // Delegamos la responsabilidad sin bloquear la respuesta a Meta
-        // Esto evita que Meta reenvíe el mensaje si el proceso tarda más de 3 segundos
         enrutarMensaje(numeroNegocio, wa_id, texto).catch(err => {
             console.error(`❌ Error crítico en el ruteo para ${wa_id}:`, err);
         });
     }
 
-    // Respondemos inmediatamente a Meta
     res.sendStatus(200);
 });
 
 
 
 
-// Encendemos el servidor para escuchar peticiones
 app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
 });
