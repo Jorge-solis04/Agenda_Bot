@@ -159,4 +159,31 @@ async function obtenerCitasDeManana(calendarId) {
     }
 }
 
-module.exports = { obtenerHuecosLibres, crearEvento, buscarCitaPorTelefono, eliminarEvento, obtenerCitasDeManana };
+async function obtenerCitasHoy(calendarId) {
+    const hoy = new Date();
+    
+    const año = hoy.getFullYear();
+    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+    const dia = String(hoy.getDate()).padStart(2, '0');
+    
+    const fechaStr = `${año}-${mes}-${dia}`; 
+    
+    const timeMin = `${fechaStr}T00:00:00-06:00`;
+    const timeMax = `${fechaStr}T23:59:59-06:00`;
+
+    try {
+        const response = await calendar.events.list({
+            calendarId: calendarId,
+            timeMin: timeMin,
+            timeMax: timeMax,
+            singleEvents: true,
+            orderBy: 'startTime',
+        });
+        return response.data.items || [];
+    } catch (error) {
+        console.error(`❌ Error buscando citas de hoy para ${calendarId}:`, error);
+        return [];
+    }
+}
+
+module.exports = { obtenerHuecosLibres, crearEvento, buscarCitaPorTelefono, eliminarEvento, obtenerCitasDeManana, obtenerCitasHoy };

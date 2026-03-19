@@ -1,7 +1,8 @@
 const cron = require('node-cron');
-const { obtenerCitasDeManana } = require('../services/calendarService');
+const { obtenerCitasDeManana, obtenerCitasHoy } = require('../services/calendarService');
 const { enviarTemplate } = require('../services/whatsAppService');
 const { clientes } = require('../router'); // Importamos el objeto de clientes
+const { capitalizarNombre } = require('./stringUtils');
 
 function iniciarCronJobs() {
     console.log('⏰ Iniciando la programación de Cron Jobs para todos los clientes...');
@@ -11,34 +12,52 @@ function iniciarCronJobs() {
         const cliente = clientes[numeroNegocio];
         const { name, calendarId } = cliente.config;
 
-        // Programamos un cron job individual para este cliente
-        // (Puedes personalizar el '0 8 * * *' si cada cliente quiere una hora distinta)
+        // Programamos un cron job individual para este cliente a las 8:00 AM CDMX
         cron.schedule('0 8 * * *', async () => {
             console.log(`✨ Ejecutando recordatorios diarios para: ${name}`);
-            
-            // Usamos el calendarId específico del cliente
-            const citas = await obtenerCitasDeManana(calendarId);
 
-            for (const cita of citas) {
-                const nombreCita = cita.summary.replace('Cita - ', '').trim();
-                const match = cita.description.match(/Teléfono:\s*(\S+)/); // Usamos \S+ para capturar más que solo dígitos
-                
-                if (match) {
-                    const telefono = match[1];
-                    const hora = new Date(cita.start.dateTime).toLocaleTimeString('es-MX', {
-                        hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Mexico_City'
-                    });
-
-                    // console.log(`   -> Enviando recordatorio a ${telefono} para la cita de ${nombreCita} a las ${hora}`);
-                    await enviarTemplate(telefono, 'recordatorio_cita', [nombreCita, hora]);
-                }
+            // 1. Recordatorios para HOY
+            const citasHoy = await obtenerCitasHoy(calendarId);
+            for (const cita of citasHoy) {
+                await procesarYEnviarRecordatorio(cita, 'recordatorio_cita_hoy', name, 'hoy');
             }
-        });
 
-        // console.log(`   ✅ Recordatorios diarios programados para ${name}.`);
+            // 2. Recordatorios para MAÑANA
+            const citasManana = await obtenerCitasDeManana(calendarId);
+            for (const cita of citasManana) {
+                await procesarYEnviarRecordatorio(cita, 'recordatorio_cita', name, 'mañana');
+            }
+
+        }, {
+            scheduled: true,
+            timezone: "America/Mexico_City"
+        });
     }
-    
+
     console.log('🏁 Programación de todos los Cron Jobs finalizada.');
 }
 
+/**
+ * Función auxiliar para procesar los datos de la cita y enviar el template de WhatsApp
+ */
+async function procesarYEnviarRecordatorio(cita, template_name, clienteNombre,log_day) {
+    const nombreCita = capitalizarNombre(cita.summary.replace('Cita - ', ''));
+    const match = cita.description.match(/Teléfono:\s*(\S+)/);
+
+    if (match) {
+        const telefono = match[1];
+        const hora = new Date(cita.start.dateTime).toLocaleTimeString('es-MX', {
+            hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Mexico_City'
+        });
+
+        console.log(`   -> [${log_day}] Enviando recordatorio a ${telefono} (${nombreCita}) a las ${hora} para ${clienteNombre}`);
+
+        // Aquí usamos el template. Podrías pasar el día como parámetro si el template lo permite, 
+        // o simplemente enviar la hora y nombre como antes.
+        await enviarTemplate(telefono, template_name, [nombreCita, hora]);
+    }
+}
+
 module.exports = { iniciarCronJobs };
+
+

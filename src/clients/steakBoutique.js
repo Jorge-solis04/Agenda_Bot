@@ -10,6 +10,7 @@ const {
   eliminarEvento,
 } = require("../services/calendarService");
 const chrono = require("chrono-node");
+const { capitalizarNombre } = require("../utils/stringUtils");
 
 const sesiones = {};
 
@@ -37,7 +38,7 @@ const handlers = {
 
       sesion.reagendando = true;
       sesion.info_cita_anterior = fechaVieja;
-      sesion.nombre = cita.summary.replace("Cita - ", "");
+      sesion.nombre = capitalizarNombre(cita.summary.replace("Cita - ", ""));
 
       await eliminarEvento(config.calendarId, cita.id);
       sesion.paso = "esperando_fecha";
@@ -60,7 +61,7 @@ const handlers = {
 
       sesion.paso = "confirmar_cancelacion";
       sesion.evento_a_cancelar = cita.id;
-      sesion.nombre = cita.summary.replace("Cita - ", "");
+      sesion.nombre = capitalizarNombre(cita.summary.replace("Cita - ", ""));
       sesion.fecha_elegida = fechaCita;
 
       return await enviarMensajeWhatsApp(wa_id, `Encontré una cita para el:\n📅 *${fechaCita}*\n\n¿Estás seguro de que deseas cancelarla? (Responde SÍ o NO)`);
@@ -155,7 +156,7 @@ const handlers = {
   },
 
   esperando_nombre: async (wa_id, texto, config, sesion) => {
-    sesion.nombre = texto.trim();
+    sesion.nombre = capitalizarNombre(texto);
     console.log(`Guardando la cita de ${sesion.nombre} en el calendario de ${config.name}...`);
 
     const exito = await crearEvento(config.calendarId, sesion.fecha_elegida, sesion.hora_elegida, sesion.nombre, wa_id);
