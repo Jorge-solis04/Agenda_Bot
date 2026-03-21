@@ -1,8 +1,12 @@
 const { google } = require('googleapis');
 const path = require('path');
 
+const credentials = process.env.GOOGLE_CREDENTIALS_B64
+    ? JSON.parse(Buffer.from(process.env.GOOGLE_CREDENTIALS_B64, 'base64').toString('utf-8'))
+    : require(path.join(__dirname, '../../credentials.json'));
+
 const auth = new google.auth.GoogleAuth({
-    keyFile: path.join(__dirname, '../../credentials.json'),
+    credentials,
     scopes: ['https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/calendar.events'],
 });
 
