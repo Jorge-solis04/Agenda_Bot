@@ -19,13 +19,13 @@ const clientes = {
     // }
 };
 
-async function enrutarMensaje(numeroNegocio, numeroCliente, texto) {
+async function enrutarMensaje(numeroNegocio, numeroCliente, texto, tipo_mensaje = "text") {
     const cliente = clientes[numeroNegocio];
 
     if (cliente) {
         // console.log(`Routing message from ${numeroCliente} to ${cliente.config.name}`);
         try {
-            await cliente.logic.procesarMensaje(numeroCliente, texto, cliente.config);
+            await cliente.logic.procesarMensaje(numeroCliente, texto, cliente.config, tipo_mensaje);
         } catch (error) {
             console.error(`❌ Error ejecutando lógica para ${cliente.config.name}:`, error);
         }

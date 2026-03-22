@@ -2,6 +2,7 @@ const {
   enviarMensajeWhatsApp,
   enviarBotonesWhatsApp,
   enviarTemplate,
+  enviarTemplateMultimedia
 } = require("../services/whatsAppService");
 const {
   obtenerHuecosLibres,
@@ -152,13 +153,19 @@ const handlers = {
     }
 
     sesion.paso = "esperando_nombre";
-    return await enviarMensajeWhatsApp(wa_id, `Perfecto, por último ¿A qué nombre agendamos la cita?`);
+    return await enviarMensajeWhatsApp(wa_id, "¡Excelente horario! 😊 ¿Cuál es tu nombre completo para registrar la cita?");
   },
 
   esperando_nombre: async (wa_id, texto, config, sesion) => {
     sesion.nombre = capitalizarNombre(texto);
-    console.log(`Guardando la cita de ${sesion.nombre} en el calendario de ${config.name}...`);
+    sesion.paso = "esperando_imagen";
+    return await enviarMensajeWhatsApp(wa_id, `¡Perfecto ${sesion.nombre}! Para que preparemos todo, por favor **envíame una foto** de referencia del corte de pelo.\n\n*(Si no tienes una o prefieres lo de siempre, solo escribe la palabra 'omitir')*`);
+  },
 
+  esperando_imagen: async (wa_id, texto, config, sesion) => {
+    const tieneFoto = !texto.includes("omitir");
+
+    console.log(`Guardando la cita de ${sesion.nombre} en el calendario de ${config.name}...`);
     const exito = await crearEvento(config.calendarId, sesion.fecha_elegida, sesion.hora_elegida, sesion.nombre, wa_id);
 
     if (!exito) {
@@ -167,12 +174,29 @@ const handlers = {
       return;
     }
 
-    await enviarMensajeWhatsApp(wa_id, `¡Listo ${sesion.nombre}! Tu cita quedó confirmada para el ${sesion.fecha_elegida} a las ${sesion.hora_elegida}.`);
+    await enviarMensajeWhatsApp(wa_id, `¡Excelente noticia, ${sesion.nombre}! ✨ Tu cita ha quedado confirmada para el día ${sesion.fecha_elegida} a las ${sesion.hora_elegida}. ¡Muchas gracias por tu confianza, nos vemos pronto! 👋😊`);
 
     if (config.ownerPhone) {
       const fechaFormateada = `${sesion.fecha_elegida} / ${sesion.hora_elegida} hrs`;
       const variablesAlerta = [sesion.nombre, wa_id, fechaFormateada];
-      await enviarTemplate(config.ownerPhone, "alerta_nueva_cita", variablesAlerta);
+      if (tieneFoto) {
+        // Si el usuario envió foto de referencia, usar template multimedia (cuando esté disponible)
+
+        const exitoMultimedia = await enviarTemplateMultimedia(config.ownerPhone, "alerta_cita_nueva_foto", variablesAlerta, texto);
+
+        if (!exitoMultimedia) {
+          console.log("⚠️ Falló el template multimedia, enviando alerta sin foto...");
+          await enviarTemplate(config.ownerPhone, "alerta_nueva_cita", variablesAlerta);
+          delete sesiones[wa_id];
+          return;
+        }
+
+
+      } else {
+        await enviarTemplate(config.ownerPhone, "alerta_nueva_cita", variablesAlerta);
+        delete sesiones[wa_id];
+        return;
+      }
     }
     delete sesiones[wa_id];
   },
@@ -197,8 +221,12 @@ const handlers = {
   },
 };
 
+// --- FUNCIONES AUXILIARES ---
+
+
+
 // --- FUNCIÓN PRINCIPAL ---
-async function procesarMensaje(wa_id, texto, config) {
+async function procesarMensaje(wa_id, contenido, config, tipo_mensaje = "text") {
   const TIEMPO_EXPIRACION = 15 * 60 * 1000;
   const ahora = Date.now();
 
@@ -215,13 +243,18 @@ async function procesarMensaje(wa_id, texto, config) {
   }
 
   const estadoActual = sesiones[wa_id].paso;
-  const textoNormalizado = texto.toLowerCase().trim();
-  console.log(`📊 [${wa_id}] Estado: ${estadoActual} | Mensaje: "${textoNormalizado}"`);
+
+  let contenidoMensaje = contenido;
+  if (tipo_mensaje === "text") {
+    contenidoMensaje = contenido.toLowerCase().trim();
+  }
+
+  console.log(`📊 [${wa_id}] Estado: ${estadoActual} | Mensaje: "${contenidoMensaje}"`);
 
   // Ejecución del handler correspondiente
   const handler = handlers[estadoActual];
   if (handler) {
-    await handler(wa_id, textoNormalizado, config, sesiones[wa_id]);
+    await handler(wa_id, contenidoMensaje, config, sesiones[wa_id]);
   } else {
     console.error(`❌ No existe un manejador para el estado: ${estadoActual}`);
     delete sesiones[wa_id];

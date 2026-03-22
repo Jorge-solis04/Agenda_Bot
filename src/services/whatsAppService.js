@@ -68,4 +68,38 @@ async function enviarTemplate(numero, templateName, variables) {
     }
 }
 
-module.exports = { enviarMensajeWhatsApp, enviarBotonesWhatsApp, enviarTemplate };
+async function enviarTemplateMultimedia(numero, templateName, variables, mediaId) {
+  // Envía un template de Meta que incluye una imagen como cabecera.
+  // mediaId: el ID de media devuelto por Meta al recibir la imagen del usuario.
+  // El template debe tener un componente "header" de tipo "image" configurado en Meta Business.
+  //
+  
+  try {
+    await axios.post(BASE_URL, {
+      messaging_product: 'whatsapp',
+      to: numero,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: 'es_MX' },
+        components: [
+          {
+            type: 'header',
+            parameters: [{ type: 'image', image: { id: mediaId } }]
+          },
+          {
+            type: 'body',
+            parameters: variables.map(v => ({ type: 'text', text: v }))
+          }
+        ]
+      }
+    }, { headers });
+    return true;
+  } catch (error) {
+    console.error('❌ Error en enviarTemplateMultimedia:', error.response?.data || error.message);
+    return false;
+  }
+  
+}
+
+module.exports = { enviarMensajeWhatsApp, enviarBotonesWhatsApp, enviarTemplate, enviarTemplateMultimedia };
