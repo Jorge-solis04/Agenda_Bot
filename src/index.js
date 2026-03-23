@@ -52,7 +52,7 @@ app.get("/webhook", (req, res) => {
 // --------------------------------------------------------- //
 // Aquí llegan todos los mensajes que los usuarios envían al número de WhatsApp
 app.post("/webhook", async (req, res) => {
-  res.status(200);
+  res.sendStatus(200);
 
   const entry = req.body.entry?.[0];
   const changes = entry?.changes?.[0];
@@ -83,7 +83,6 @@ app.post("/webhook", async (req, res) => {
     });
   }
 
-  res.sendStatus(200);
 });
 
 app.listen(PORT, () => {
