@@ -7,7 +7,7 @@ const { iniciarCronJobs } = require("./utils/cronManager");
 const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERIFY_TOKEN = "steakBoutique_bot_token_123";
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 app.use(express.json());
 
